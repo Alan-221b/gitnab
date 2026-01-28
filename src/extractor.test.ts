@@ -1,229 +1,156 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { mkdirSync, rmSync, readFileSync, existsSync, writeFileSync, createReadStream } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import * as tar from 'tar';
+import { extractTarball } from './extractor.js';
 
-/**
- * Test helper functions for path matching and strip count calculation
- * These mirror the logic in extractor.ts
- */
+describe('extractTarball', () => {
+  let testDir: string;
+  let sourceDir: string;
+  let tarballPath: string;
 
-/**
- * Check if a path within the tarball matches the requested subpath
- */
-function pathMatchesSubfolder(
-  tarballPath: string,
-  tarballPrefix: string,
-  subpath: string
-): boolean {
-  // Remove the tarball prefix (e.g., "owner-repo-abc1234/")
-  const relativePath = tarballPath.slice(tarballPrefix.length);
-  
-  const subpathParts = subpath.split('/').filter(Boolean);
-  const pathParts = relativePath.split('/').filter(Boolean);
+  beforeEach(() => {
+    const base = join(tmpdir(), `gitnab-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    testDir = join(base, 'output');
+    sourceDir = join(base, 'source');
+    tarballPath = join(base, 'test.tar');
+    mkdirSync(testDir, { recursive: true });
+    mkdirSync(sourceDir, { recursive: true });
+  });
 
-  // The path must start with the subpath
-  for (let i = 0; i < subpathParts.length; i++) {
-    if (pathParts[i] !== subpathParts[i]) {
-      return false;
+  afterEach(() => {
+    rmSync(join(testDir, '..'), { recursive: true, force: true });
+  });
+
+  /**
+   * Create a tarball stream from a directory structure
+   */
+  async function createTarballStream(
+    prefix: string,
+    files: { path: string; content?: string }[]
+  ): Promise<ReadableStream<Uint8Array>> {
+    // Create the source directory structure
+    const prefixDir = join(sourceDir, prefix);
+    mkdirSync(prefixDir, { recursive: true });
+
+    for (const file of files) {
+      const fullPath = join(prefixDir, file.path);
+      if (file.content !== undefined) {
+        mkdirSync(join(fullPath, '..'), { recursive: true });
+        writeFileSync(fullPath, file.content);
+      } else {
+        mkdirSync(fullPath, { recursive: true });
+      }
     }
+
+    // Create tarball file
+    await tar.create(
+      {
+        file: tarballPath,
+        cwd: sourceDir,
+        gzip: false,
+      },
+      [prefix]
+    );
+
+    // Read tarball and convert to web stream
+    const nodeStream = createReadStream(tarballPath);
+    return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
   }
 
-  // Must have content beyond just the subpath directory itself
-  return pathParts.length > subpathParts.length;
-}
+  it('should extract files from subpath', async () => {
+    const stream = await createTarballStream('owner-repo-abc123', [
+      { path: 'src/index.ts', content: 'console.log("src")' },
+      { path: 'examples/demo.ts', content: 'console.log("demo")' },
+      { path: 'examples/nested/deep.ts', content: 'console.log("deep")' },
+    ]);
 
-/**
- * Calculate how many path components to strip when extracting
- */
-function calculateStripCount(subpath: string, keepFolderName: boolean): number {
-  const subpathParts = subpath.split('/').filter(Boolean);
-  const subpathDepth = subpathParts.length;
-  
-  // Tarball prefix (1) + subpath components
-  // If keepFolderName is true, keep the last subpath component
-  return 1 + (keepFolderName ? subpathDepth - 1 : subpathDepth);
-}
+    await extractTarball(stream, {
+      destination: testDir,
+      subpath: 'examples',
+      keepFolderName: false,
+    });
 
-/**
- * Calculate the output path for a file after stripping
- */
-function calculateOutputPath(
-  tarballPath: string,
-  stripCount: number
-): string {
-  const pathParts = tarballPath.split('/');
-  return pathParts.slice(stripCount).join('/');
-}
+    assert.strictEqual(readFileSync(join(testDir, 'demo.ts'), 'utf-8'), 'console.log("demo")');
+    assert.strictEqual(readFileSync(join(testDir, 'nested/deep.ts'), 'utf-8'), 'console.log("deep")');
+    assert.strictEqual(existsSync(join(testDir, 'index.ts')), false);
+  });
 
-describe('pathMatchesSubfolder', () => {
-  const prefix = 'owner-repo-abc1234/';
+  it('should keep folder name when keepFolderName is true', async () => {
+    const stream = await createTarballStream('owner-repo-abc123', [
+      { path: 'examples/file.ts', content: 'content' },
+    ]);
 
-  it('should match files directly within subpath', () => {
-    const result = pathMatchesSubfolder(
-      'owner-repo-abc1234/examples/file.ts',
-      prefix,
-      'examples'
+    await extractTarball(stream, {
+      destination: testDir,
+      subpath: 'examples',
+      keepFolderName: true,
+    });
+
+    assert.strictEqual(readFileSync(join(testDir, 'examples/file.ts'), 'utf-8'), 'content');
+  });
+
+  it('should handle nested subpaths', async () => {
+    const stream = await createTarballStream('owner-repo-abc123', [
+      { path: 'src/components/Button/index.ts', content: 'button' },
+      { path: 'src/components/Input/index.ts', content: 'input' },
+      { path: 'src/utils/helper.ts', content: 'helper' },
+    ]);
+
+    await extractTarball(stream, {
+      destination: testDir,
+      subpath: 'src/components',
+      keepFolderName: false,
+    });
+
+    assert.strictEqual(readFileSync(join(testDir, 'Button/index.ts'), 'utf-8'), 'button');
+    assert.strictEqual(readFileSync(join(testDir, 'Input/index.ts'), 'utf-8'), 'input');
+    assert.strictEqual(existsSync(join(testDir, 'helper.ts')), false);
+  });
+
+  it('should throw error when no files found', async () => {
+    const stream = await createTarballStream('owner-repo-abc123', [
+      { path: 'src/index.ts', content: 'content' },
+    ]);
+
+    await assert.rejects(
+      () => extractTarball(stream, {
+        destination: testDir,
+        subpath: 'nonexistent',
+        keepFolderName: false,
+      }),
+      /No files found at path "nonexistent"/
     );
-    assert.strictEqual(result, true);
   });
 
-  it('should match files in nested directories within subpath', () => {
-    const result = pathMatchesSubfolder(
-      'owner-repo-abc1234/examples/nested/deep/file.ts',
-      prefix,
-      'examples'
-    );
-    assert.strictEqual(result, true);
+  it('should handle directories in tarball', async () => {
+    const stream = await createTarballStream('owner-repo-abc123', [
+      { path: 'examples/nested/file.ts', content: 'nested content' },
+    ]);
+
+    await extractTarball(stream, {
+      destination: testDir,
+      subpath: 'examples',
+      keepFolderName: false,
+    });
+
+    assert.strictEqual(readFileSync(join(testDir, 'nested/file.ts'), 'utf-8'), 'nested content');
   });
 
-  it('should not match files outside subpath', () => {
-    const result = pathMatchesSubfolder(
-      'owner-repo-abc1234/src/file.ts',
-      prefix,
-      'examples'
-    );
-    assert.strictEqual(result, false);
-  });
+  it('should handle nested subpath with keepFolderName', async () => {
+    const stream = await createTarballStream('owner-repo-abc123', [
+      { path: 'a/b/c/file.ts', content: 'deep' },
+    ]);
 
-  it('should not match the subpath directory itself', () => {
-    const result = pathMatchesSubfolder(
-      'owner-repo-abc1234/examples/',
-      prefix,
-      'examples'
-    );
-    assert.strictEqual(result, false);
-  });
+    await extractTarball(stream, {
+      destination: testDir,
+      subpath: 'a/b/c',
+      keepFolderName: true,
+    });
 
-  it('should handle nested subpaths', () => {
-    const matchInside = pathMatchesSubfolder(
-      'owner-repo-abc1234/src/components/Button/index.ts',
-      prefix,
-      'src/components'
-    );
-    assert.strictEqual(matchInside, true);
-
-    const matchOutside = pathMatchesSubfolder(
-      'owner-repo-abc1234/src/utils/helper.ts',
-      prefix,
-      'src/components'
-    );
-    assert.strictEqual(matchOutside, false);
-  });
-
-  it('should not match partial folder names', () => {
-    const result = pathMatchesSubfolder(
-      'owner-repo-abc1234/examples-v2/file.ts',
-      prefix,
-      'examples'
-    );
-    assert.strictEqual(result, false);
-  });
-
-  it('should handle root-level subpath', () => {
-    const result = pathMatchesSubfolder(
-      'owner-repo-abc1234/docs/README.md',
-      prefix,
-      'docs'
-    );
-    assert.strictEqual(result, true);
-  });
-});
-
-describe('calculateStripCount', () => {
-  it('should calculate correct strip count without keepFolderName', () => {
-    // Single level subpath: strip "prefix/" + "examples/" = 2
-    assert.strictEqual(calculateStripCount('examples', false), 2);
-  });
-
-  it('should calculate correct strip count with keepFolderName', () => {
-    // Single level subpath with keep: strip only "prefix/" = 1
-    // (keeping "examples/")
-    assert.strictEqual(calculateStripCount('examples', true), 1);
-  });
-
-  it('should handle nested subpath without keepFolderName', () => {
-    // Nested subpath: strip "prefix/" + "src/" + "components/" = 3
-    assert.strictEqual(calculateStripCount('src/components', false), 3);
-  });
-
-  it('should handle nested subpath with keepFolderName', () => {
-    // Nested subpath with keep: strip "prefix/" + "src/" = 2
-    // (keeping "components/")
-    assert.strictEqual(calculateStripCount('src/components', true), 2);
-  });
-
-  it('should handle deeply nested subpath', () => {
-    // a/b/c/d: 4 parts
-    assert.strictEqual(calculateStripCount('a/b/c/d', false), 5);
-    assert.strictEqual(calculateStripCount('a/b/c/d', true), 4);
-  });
-});
-
-describe('calculateOutputPath', () => {
-  it('should strip correct number of components', () => {
-    const result = calculateOutputPath(
-      'owner-repo-abc1234/examples/file.ts',
-      2
-    );
-    assert.strictEqual(result, 'file.ts');
-  });
-
-  it('should preserve nested structure after stripping', () => {
-    const result = calculateOutputPath(
-      'owner-repo-abc1234/examples/nested/deep/file.ts',
-      2
-    );
-    assert.strictEqual(result, 'nested/deep/file.ts');
-  });
-
-  it('should keep folder name when strip count is lower', () => {
-    const result = calculateOutputPath(
-      'owner-repo-abc1234/examples/file.ts',
-      1
-    );
-    assert.strictEqual(result, 'examples/file.ts');
-  });
-
-  it('should handle deeply nested stripping', () => {
-    const result = calculateOutputPath(
-      'owner-repo-abc1234/src/components/Button/index.ts',
-      3
-    );
-    assert.strictEqual(result, 'Button/index.ts');
-  });
-});
-
-describe('integration scenarios', () => {
-  it('should correctly extract to current directory without keepFolderName', () => {
-    const tarballPath = 'vercel-next.js-abc1234/examples/hello-world/package.json';
-    const prefix = 'vercel-next.js-abc1234/';
-    const subpath = 'examples/hello-world';
-    
-    // Verify the path matches
-    assert.strictEqual(pathMatchesSubfolder(tarballPath, prefix, subpath), true);
-    
-    // Calculate strip count (no keep)
-    const stripCount = calculateStripCount(subpath, false);
-    assert.strictEqual(stripCount, 3); // 1 + 2 subpath parts
-    
-    // Calculate output path
-    const outputPath = calculateOutputPath(tarballPath, stripCount);
-    assert.strictEqual(outputPath, 'package.json');
-  });
-
-  it('should correctly extract with keepFolderName', () => {
-    const tarballPath = 'vercel-next.js-abc1234/examples/hello-world/src/index.ts';
-    const prefix = 'vercel-next.js-abc1234/';
-    const subpath = 'examples/hello-world';
-    
-    // Verify the path matches
-    assert.strictEqual(pathMatchesSubfolder(tarballPath, prefix, subpath), true);
-    
-    // Calculate strip count (with keep)
-    const stripCount = calculateStripCount(subpath, true);
-    assert.strictEqual(stripCount, 2); // 1 + (2 - 1) = keep "hello-world"
-    
-    // Calculate output path
-    const outputPath = calculateOutputPath(tarballPath, stripCount);
-    assert.strictEqual(outputPath, 'hello-world/src/index.ts');
+    assert.strictEqual(readFileSync(join(testDir, 'c/file.ts'), 'utf-8'), 'deep');
   });
 });
