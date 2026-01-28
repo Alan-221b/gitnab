@@ -1,6 +1,9 @@
 # gitnab
 
 [![npm version](https://img.shields.io/npm/v/gitnab.svg)](https://www.npmjs.com/package/gitnab)
+[![CI](https://github.com/Alan-221b/gitnab/actions/workflows/ci.yml/badge.svg)](https://github.com/Alan-221b/gitnab/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Alan-221b_gitnab&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Alan-221b_gitnab)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Alan-221b_gitnab&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Alan-221b_gitnab)
 
 > Nab just what you need from any Git repo
 

@@ -185,4 +185,63 @@ describe('downloadTarball', () => {
       server.close();
     }
   });
+
+  it('should handle HTTP error after redirect', async () => {
+    let redirectServer: ReturnType<typeof createServer>;
+    let errorServer: ReturnType<typeof createServer>;
+
+    // Server that returns 404
+    errorServer = createServer((req, res) => {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    });
+
+    await new Promise<void>((resolve) => errorServer.listen(0, resolve));
+    const errorPort = (errorServer.address() as { port: number }).port;
+
+    // Redirect server pointing to error server
+    redirectServer = createServer((req, res) => {
+      res.writeHead(302, { Location: `http://localhost:${errorPort}/notfound` });
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => redirectServer.listen(0, resolve));
+    const redirectPort = (redirectServer.address() as { port: number }).port;
+
+    try {
+      const provider = createMockProvider(`http://localhost:${redirectPort}/redirect`);
+      const info: RepoInfo = { owner: 'test', repo: 'test', ref: 'main', subpath: 'src' };
+
+      await assert.rejects(
+        () => downloadTarball(provider, info),
+        /HTTP error: 404/
+      );
+    } finally {
+      redirectServer.close();
+      errorServer.close();
+    }
+  });
+
+  it('should handle network error after redirect', async () => {
+    // Redirect server pointing to unreachable address
+    const redirectServer = createServer((req, res) => {
+      res.writeHead(302, { Location: 'http://127.0.0.1:1/unreachable' });
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => redirectServer.listen(0, resolve));
+    const redirectPort = (redirectServer.address() as { port: number }).port;
+
+    try {
+      const provider = createMockProvider(`http://localhost:${redirectPort}/redirect`);
+      const info: RepoInfo = { owner: 'test', repo: 'test', ref: 'main', subpath: 'src' };
+
+      await assert.rejects(
+        () => downloadTarball(provider, info),
+        /Network error/
+      );
+    } finally {
+      redirectServer.close();
+    }
+  });
 });

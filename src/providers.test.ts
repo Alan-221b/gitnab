@@ -170,5 +170,72 @@ describe('Provider Headers', () => {
 
     assert.strictEqual(headers['User-Agent'], 'gitnab');
   });
+});
 
+describe('GitHub formatError', () => {
+  it('should format 404 error with helpful message', () => {
+    const { provider, info } = parseUrl('https://github.com/owner/repo/tree/main/path');
+    const headers = new Headers();
+    const error = provider.formatError(info, 404, headers);
+
+    assert.ok(error.includes('Repository or branch not found'));
+    assert.ok(error.includes('owner/repo@main'));
+    assert.ok(error.includes('repository exists and is public'));
+    assert.ok(error.includes('branch/tag "main" exists'));
   });
+
+  it('should format 403 rate limit error', () => {
+    const { provider, info } = parseUrl('https://github.com/owner/repo/tree/main/path');
+    const headers = new Headers();
+    headers.set('x-ratelimit-remaining', '0');
+    const error = provider.formatError(info, 403, headers);
+
+    assert.ok(error.includes('rate limit exceeded'));
+  });
+
+  it('should format generic error', () => {
+    const { provider, info } = parseUrl('https://github.com/owner/repo/tree/main/path');
+    const headers = new Headers();
+    const error = provider.formatError(info, 500, headers);
+
+    assert.strictEqual(error, 'GitHub error: 500');
+  });
+
+  it('should format 403 without rate limit as generic error', () => {
+    const { provider, info } = parseUrl('https://github.com/owner/repo/tree/main/path');
+    const headers = new Headers();
+    headers.set('x-ratelimit-remaining', '10');
+    const error = provider.formatError(info, 403, headers);
+
+    assert.strictEqual(error, 'GitHub error: 403');
+  });
+});
+
+describe('GitLab formatError', () => {
+  it('should format 404 error with helpful message', () => {
+    const { provider, info } = parseUrl('https://gitlab.com/owner/project/-/tree/main/path');
+    const headers = new Headers();
+    const error = provider.formatError(info, 404, headers);
+
+    assert.ok(error.includes('Project or branch not found'));
+    assert.ok(error.includes('owner/project@main'));
+    assert.ok(error.includes('project exists and is public'));
+    assert.ok(error.includes('branch/tag "main" exists'));
+  });
+
+  it('should format 404 error for nested namespace', () => {
+    const { provider, info } = parseUrl('https://gitlab.com/group/subgroup/project/-/tree/develop/src');
+    const headers = new Headers();
+    const error = provider.formatError(info, 404, headers);
+
+    assert.ok(error.includes('group/subgroup/project@develop'));
+  });
+
+  it('should format generic error', () => {
+    const { provider, info } = parseUrl('https://gitlab.com/owner/project/-/tree/main/path');
+    const headers = new Headers();
+    const error = provider.formatError(info, 500, headers);
+
+    assert.strictEqual(error, 'GitLab error: 500');
+  });
+});
