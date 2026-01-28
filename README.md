@@ -1,5 +1,7 @@
 # gitnab
 
+[![npm version](https://img.shields.io/npm/v/gitnab.svg)](https://www.npmjs.com/package/gitnab)
+
 > Nab just what you need from any Git repo
 
 A CLI tool to extract a subfolder from GitHub or GitLab repositories into your current directory (or any destination).
