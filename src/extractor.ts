@@ -31,6 +31,8 @@ export async function extractTarball(
   const nodeStream = Readable.fromWeb(stream as import('stream/web').ReadableStream);
 
   await new Promise<void>((resolve, reject) => {
+    const writePromises: Promise<void>[] = [];
+
     const parser = new tar.Parser({
       filter: (path) => {
         // Detect the tarball prefix from the first entry
@@ -96,6 +98,10 @@ export async function extractTarball(
         } else if (entry.type === 'File') {
           mkdirSync(dirname(extractPath), { recursive: true });
           const writeStream = createWriteStream(extractPath);
+          writePromises.push(new Promise<void>((res, rej) => {
+            writeStream.on('finish', res);
+            writeStream.on('error', rej);
+          }));
           entry.pipe(writeStream);
         } else {
           entry.resume();
@@ -103,13 +109,15 @@ export async function extractTarball(
       },
     });
 
-    parser.on('end', () => {
+    parser.on('end', async () => {
       if (!foundFiles) {
         reject(new Error(
           `No files found at path "${subpath}".\n` +
           `Please check that the path exists in the repository.`
         ));
       } else {
+        // Wait for all file writes to complete
+        await Promise.all(writePromises);
         resolve();
       }
     });
