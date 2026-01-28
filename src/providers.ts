@@ -4,7 +4,7 @@ import type { GitProvider, RepoInfo } from './types.js';
  * Normalize subpath by removing leading/trailing slashes
  */
 function normalizeSubpath(subpath: string): string {
-  return subpath.replace(/^\/+|\/+$/g, '');
+  return subpath.replaceAll(/(^\/+)|(\/+$)/g, '');
 }
 
 // ============== GitHub Provider ==============
@@ -19,7 +19,7 @@ class GitHubProvider implements GitProvider {
   }
 
   parseUrl(url: string): RepoInfo {
-    const match = url.replace(/\/+$/, '').match(GitHubProvider.URL_REGEX);
+    const match = GitHubProvider.URL_REGEX.exec(url.replace(/\/+$/, ''));
     if (!match) {
       throw new Error(
         `Invalid GitHub URL format.\n\n` +
@@ -71,7 +71,7 @@ class GitLabProvider implements GitProvider {
   }
 
   parseUrl(url: string): RepoInfo {
-    const match = url.replace(/\/+$/, '').match(GitLabProvider.URL_REGEX);
+    const match = GitLabProvider.URL_REGEX.exec(url.replace(/\/+$/, ''));
     if (!match) {
       throw new Error(
         `Invalid GitLab URL format.\n\n` +
