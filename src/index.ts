@@ -1,22 +1,24 @@
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
-import { parseGitHubUrl } from './github-url.js';
+import { parseUrl } from './providers.js';
 import { downloadTarball } from './downloader.js';
 import { extractTarball } from './extractor.js';
 import type { CliOptions } from './types.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 const HELP_TEXT = `
-gitnab - Nab just what you need from any GitHub repo
+gitnab - Nab just what you need from any Git repo
 
-Usage: gitnab <github-url> [destination]
+Usage: gitnab <url> [destination]
 
 Arguments:
-  github-url   GitHub URL with path
-               e.g., https://github.com/owner/repo/tree/main/path/to/folder
-               or shorthand: owner/repo/path/to/folder (defaults to main branch)
+  url          Repository URL with path to subfolder
   destination  Output directory (default: current directory)
+
+Supported Platforms:
+  GitHub: https://github.com/owner/repo/tree/branch/path
+  GitLab: https://gitlab.com/namespace/project/-/tree/branch/path
 
 Options:
   -k, --keep-folder-name  Keep the folder name in output
@@ -27,14 +29,14 @@ Options:
   -v, --version           Show version number
 
 Examples:
-  # Extract examples folder to current directory
-  gitnab https://github.com/owner/repo/tree/main/examples .
+  # Extract from GitHub
+  gitnab https://github.com/vercel/next.js/tree/canary/examples/hello-world .
 
-  # Extract and keep the folder name
+  # Extract from GitLab
+  gitnab https://gitlab.com/gitlab-org/gitlab/-/tree/master/doc/api .
+
+  # Keep the folder name
   gitnab -k https://github.com/owner/repo/tree/main/src/components
-
-  # Use shorthand (defaults to main branch)
-  gitnab owner/repo/examples ./my-examples
 `.trim();
 
 /**
@@ -96,31 +98,32 @@ async function main(): Promise<void> {
     }
 
     if (!options.url) {
-      console.error('Error: GitHub URL is required.\n');
+      console.error('Error: Repository URL is required.\n');
       console.log(HELP_TEXT);
       process.exit(1);
     }
 
-    // Parse the GitHub URL
-    console.log('Parsing GitHub URL...');
-    const repoInfo = parseGitHubUrl(options.url);
-    console.log(`  Repository: ${repoInfo.owner}/${repoInfo.repo}`);
-    console.log(`  Branch/Tag: ${repoInfo.ref}`);
-    console.log(`  Path: ${repoInfo.subpath}`);
+    // Parse the URL and detect provider
+    console.log('Parsing URL...');
+    const { provider, info } = parseUrl(options.url);
+    console.log(`  Provider: ${provider.name}`);
+    console.log(`  Repository: ${info.owner}/${info.repo}`);
+    console.log(`  Branch/Tag: ${info.ref}`);
+    console.log(`  Path: ${info.subpath}`);
 
     // Download the tarball
     console.log('\nDownloading tarball...');
-    const stream = await downloadTarball(repoInfo);
+    const stream = await downloadTarball(provider, info);
 
     // Extract the files
     console.log('Extracting files...');
     await extractTarball(stream, {
       destination: options.destination,
-      subpath: repoInfo.subpath,
+      subpath: info.subpath,
       keepFolderName: options.keepFolderName,
     });
 
-    const folderName = repoInfo.subpath.split('/').pop();
+    const folderName = info.subpath.split('/').pop();
     const outputPath = options.keepFolderName
       ? `${options.destination}/${folderName}`
       : options.destination;

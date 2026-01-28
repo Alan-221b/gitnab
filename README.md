@@ -1,14 +1,14 @@
 # gitnab
 
-> Nab just what you need from any GitHub repo
+> Nab just what you need from any Git repo
 
-A CLI tool to extract a subfolder from a GitHub repository into your current directory (or any destination).
+A CLI tool to extract a subfolder from GitHub or GitLab repositories into your current directory (or any destination).
 
 ## Installation
 
 ```bash
 # Use directly with npx (no installation required)
-npx gitnab <github-url> [destination]
+npx gitnab <url> [destination]
 
 # Or install globally
 npm install -g gitnab
@@ -26,9 +26,18 @@ npx gitnab https://github.com/owner/repo/tree/main/src/components ./my-component
 # Keep the folder name in output
 npx gitnab -k https://github.com/owner/repo/tree/main/examples
 # Creates ./examples/ directory
+```
 
-# Use shorthand (defaults to main branch)
-npx gitnab owner/repo/path/to/folder
+## Supported Platforms
+
+### GitHub
+```bash
+npx gitnab https://github.com/owner/repo/tree/branch/path/to/folder
+```
+
+### GitLab
+```bash
+npx gitnab https://gitlab.com/namespace/project/-/tree/branch/path/to/folder
 ```
 
 ## Options
@@ -40,26 +49,19 @@ npx gitnab owner/repo/path/to/folder
 | `--help` | `-h` | Show help message |
 | `--version` | `-v` | Show version number |
 
-## URL Formats
-
-### Full GitHub URL
-```
-https://github.com/owner/repo/tree/branch/path/to/folder
-```
-
-### Shorthand (defaults to main branch)
-```
-owner/repo/path/to/folder
-```
-
 ## Examples
 
-### Extract Next.js examples
+### Extract Next.js examples from GitHub
 ```bash
 npx gitnab https://github.com/vercel/next.js/tree/canary/examples/hello-world .
 ```
 
-### Extract and keep folder structure
+### Extract GitLab documentation
+```bash
+npx gitnab https://gitlab.com/gitlab-org/gitlab/-/tree/master/doc/api ./gitlab-docs
+```
+
+### Keep folder structure
 ```bash
 npx gitnab -k https://github.com/facebook/react/tree/main/packages/react
 # Creates ./react/ directory with contents
@@ -80,10 +82,11 @@ npx gitnab https://github.com/owner/repo/tree/v1.0.0/examples .
 
 ## How It Works
 
-1. Parses the GitHub URL to extract owner, repo, branch, and path
-2. Downloads the repository tarball from GitHub's API
-3. Streams and extracts only the files within the requested subfolder
-4. Writes files to the destination directory
+1. Parses the URL to detect the platform (GitHub or GitLab)
+2. Extracts owner, repo, branch, and path from the URL
+3. Downloads the repository tarball from the platform's API
+4. Streams and extracts only the files within the requested subfolder
+5. Writes files to the destination directory
 
 ## License
 
