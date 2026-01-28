@@ -27,6 +27,13 @@ describe('parseUrl - GitHub', () => {
     assert.strictEqual(info.subpath, 'path');
   });
 
+  it('should strip query parameters from URL', () => {
+    const { info } = parseUrl('https://github.com/owner/repo/tree/main/src/components?ref_type=heads');
+
+    assert.strictEqual(info.subpath, 'src/components');
+    assert.strictEqual(info.ref, 'main');
+  });
+
   it('should extract correct branch/tag refs', () => {
     const { info: infoDevelop } = parseUrl('https://github.com/owner/repo/tree/develop/path');
     assert.strictEqual(infoDevelop.ref, 'develop');
@@ -95,6 +102,13 @@ describe('parseUrl - GitLab', () => {
     const { info } = parseUrl('https://gitlab.com/owner/project/-/tree/main/path/');
 
     assert.strictEqual(info.subpath, 'path');
+  });
+
+  it('should strip query parameters from URL', () => {
+    const { info } = parseUrl('https://gitlab.com/group/project/-/tree/main/src/components?ref_type=heads');
+
+    assert.strictEqual(info.subpath, 'src/components');
+    assert.strictEqual(info.ref, 'main');
   });
 
   it('should reject invalid GitLab URL - missing /-/', () => {

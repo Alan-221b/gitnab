@@ -19,7 +19,9 @@ class GitHubProvider implements GitProvider {
   }
 
   parseUrl(url: string): RepoInfo {
-    const match = GitHubProvider.URL_REGEX.exec(url.replace(/\/+$/, ''));
+    // Strip query parameters and trailing slashes
+    const cleanUrl = url.split('?')[0].replace(/\/+$/, '');
+    const match = GitHubProvider.URL_REGEX.exec(cleanUrl);
     if (!match) {
       throw new Error(
         `Invalid GitHub URL format.\n\n` +
@@ -71,7 +73,9 @@ class GitLabProvider implements GitProvider {
   }
 
   parseUrl(url: string): RepoInfo {
-    const match = GitLabProvider.URL_REGEX.exec(url.replace(/\/+$/, ''));
+    // Strip query parameters and trailing slashes
+    const cleanUrl = url.split('?')[0].replace(/\/+$/, '');
+    const match = GitLabProvider.URL_REGEX.exec(cleanUrl);
     if (!match) {
       throw new Error(
         `Invalid GitLab URL format.\n\n` +
