@@ -24,8 +24,16 @@
     "cli",
     "tarball"
   ],
-  "author": "",
+  "author": "Alan Tondelier <alan@221b.fr>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alan-221b/gitnab.git"
+  },
+  "homepage": "https://github.com/Alan-221b/gitnab#readme",
+  "bugs": {
+    "url": "https://github.com/Alan-221b/gitnab/issues"
+  },
   "engines": {
     "node": ">=18"
   },
